@@ -1,0 +1,42 @@
+name: Daily dashboard email
+
+on:
+  schedule:
+    # 03:30 UTC = 9:00 AM IST, every day. (GitHub may start scheduled runs a few minutes late.)
+    - cron: "30 3 * * *"
+  workflow_dispatch: {}   # adds a "Run workflow" button for manual test sends
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install browser
+        run: |
+          pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+
+      - name: Capture dashboard and send email
+        env:
+          DASHBOARD_URL: ${{ vars.DASHBOARD_URL }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          MAIL_FROM: ${{ secrets.MAIL_FROM }}
+          MAIL_TO: ${{ secrets.MAIL_TO }}
+        run: python send_dashboard.py
+
+      - name: Keep screenshot with the run (7 days)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dashboard-screenshot
+          path: dashboard.png
+          retention-days: 7
