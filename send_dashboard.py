@@ -31,10 +31,13 @@ RECIPIENTS = {
     "to": ["bryan.f@ergode.com"],
     "cc": [
         "ankush.l@ergode.com",
+        "krishna.s@ergode.com",
+        "pankaj.r@virventures.com",
         "vijay.sharma@ergode.com",
         "rohitash.s@virventures.com",
         "akash.sonar@virventures.com",
         "rupesh@ergodeinc.com",
+      
     ],
 }
 
