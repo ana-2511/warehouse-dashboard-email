@@ -6,7 +6,8 @@ Unaccounted Item Google Sheet and Zoho WMS have all loaded, then captures each
 dashboard section as its own sharp image (element screenshots are never cropped)
 and emails them inside the Warehouse Team template.
 
-Runs every day at 9:00 AM IST from GitHub Actions (.github/workflows/).
+Runs every Monday at 9:00 AM IST from GitHub Actions (.github/workflows/).
+The Zoho pending outgoing data (VVI_FBM) is attached as a CSV file.
 
 Settings (GitHub repository secrets):
   SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD  - the sending mailbox (team@virventures.com)
@@ -17,6 +18,7 @@ Recipients are set in RECIPIENTS below (edit this file to change them).
 
 import os
 import smtplib
+import urllib.request
 import sys
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
@@ -104,6 +106,20 @@ def capture(url: str) -> dict:
     return status
 
 
+def fetch_zoho_csv() -> bytes | None:
+    """Download the Zoho pending outgoing rows as CSV from the dashboard's function."""
+    url = DASHBOARD_URL.rstrip("/") + "/.netlify/functions/get-zoho?format=csv"
+    for attempt in (1, 2, 3):
+        try:
+            with urllib.request.urlopen(url, timeout=90) as r:
+                if r.status == 200 and "csv" in (r.headers.get("Content-Type") or ""):
+                    return r.read()
+                print(f"Zoho CSV attempt {attempt}: unexpected response {r.status}")
+        except Exception as e:  # noqa: BLE001
+            print(f"Zoho CSV attempt {attempt} failed: {e}")
+    return None
+
+
 def is_live(st: dict) -> bool:
     return ("Live Metabase" in st.get("metabase", "")
             and "unavailable" not in st.get("sheet", "").lower()
@@ -117,7 +133,7 @@ def img_tag(cid: str, alt: str) -> str:
             f'border:1px solid #D0D7DE;border-radius:6px;margin:8px 0 18px 0">')
 
 
-def build_email(status: dict):
+def build_email(status: dict, zoho_csv: bytes | None = None):
     now = datetime.now(IST)
     smtp_user = os.environ["SMTP_USER"]
     sender = os.environ.get("MAIL_FROM") or f"Warehouse Team - Virventures <{smtp_user}>"
@@ -139,6 +155,9 @@ def build_email(status: dict):
         f'Zoho: {status.get("zoho")}). Please check the live dashboard for current figures.</p>')
 
     p = 'style="margin:0 0 14px;line-height:1.5"'
+    zoho_name = f"zoho-pending-outgoing-VVI_FBM-{now:%Y-%m-%d}.csv"
+    zoho_note = (f'<p style="margin:0 0 14px;font-size:13px;color:#57606A">The full list of pending outgoing '
+                 f'orders is attached: <b>{zoho_name}</b></p>') if zoho_csv else ""
     h = 'style="margin:22px 0 8px;font-size:15px"'
     html = f"""<html><body style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#1F2328">
 {warning}
@@ -148,6 +167,7 @@ def build_email(status: dict):
 <p {h}><b>1. Unshipped Inventory</b></p>
 <p {p}>It is important to ensure that all unshipped inventory is dispatched at the earliest. We request you to maintain a 24-hour turnaround time (TAT) for processing and shipping these orders. Delays in shipment can negatively impact our marketplace On-Time Delivery Rate (OTDR) metrics and may result in negative customer feedback.</p>
 {img("zoho", "Pending Outgoing and Ageing Unshipped")}
+{zoho_note}
 
 <p {h}><b>2. Unaccounted Inventory</b></p>
 <p {p}>Vendors expect unaccounted inventory to be returned within seven days. Timely identification and processing of this inventory are essential to ensure it is returned to the respective vendors within the expected timeline. Additionally, the sooner the inventory is accounted for and made available in the system, the sooner we can list the products and make them available for sale.</p>
@@ -173,6 +193,9 @@ def build_email(status: dict):
     for k, path in shots.items():
         with open(path, "rb") as f:
             related.add_related(f.read(), maintype="image", subtype="png", cid=cids[k])
+
+    if zoho_csv:
+        msg.add_attachment(zoho_csv, maintype="text", subtype="csv", filename=zoho_name)
 
     full = f"{OUT_DIR}/full-dashboard.png"
     if os.path.exists(full):
@@ -200,9 +223,14 @@ def send(msg: EmailMessage, recipients: list):
 if __name__ == "__main__":
     st = capture(DASHBOARD_URL)
     print("Capture status:", st)
+    csv_data = fetch_zoho_csv()
+    if csv_data:
+        os.makedirs(OUT_DIR, exist_ok=True)
+        with open(f"{OUT_DIR}/zoho-pending-outgoing.csv", "wb") as f:
+            f.write(csv_data)
     if os.environ.get("SKIP_EMAIL") == "1":
-        print("SKIP_EMAIL=1, screenshots saved only.")
+        print("SKIP_EMAIL=1, screenshots and Zoho CSV saved only.")
         sys.exit(0)
-    message, to = build_email(st)
+    message, to = build_email(st, csv_data)
     send(message, to)
     print(f"Sent to {len(to)} recipient(s).")
