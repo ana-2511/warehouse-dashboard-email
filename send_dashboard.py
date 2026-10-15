@@ -28,15 +28,14 @@ from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
 
 # ---------------------------------------------------------------- recipients
 RECIPIENTS = {
-    "to": ["bryan.f@ergode.com"],
+    "to": ["rupesh@ergodeinc.com"],
     "cc": [
         "ankush.l@ergode.com",
         "krishna.s@ergode.com",
         "pankaj.r@virventures.com",
         "vijay.sharma@ergode.com",
         "rohitash.s@virventures.com",
-        "akash.sonar@virventures.com",
-        "rupesh@ergodeinc.com",
+        "akash.sonar@virventures.com"
       
     ],
 }
