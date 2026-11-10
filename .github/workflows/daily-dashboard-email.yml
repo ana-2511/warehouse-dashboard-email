@@ -2,7 +2,7 @@ name: Weekly dashboard email
 
 on:
   schedule:
-    # Monday 03:30 UTC = Monday 9:00 AM IST, once a week. (GitHub may start scheduled runs a few minutes late.)
+    # Monday 03:30 UTC = Tuesday 5:30PM IST, once a week. (GitHub may start scheduled runs a few minutes late.)
     - cron: "30 5 * * 2"
   workflow_dispatch:      # adds a "Run workflow" button for manual runs
     inputs:
