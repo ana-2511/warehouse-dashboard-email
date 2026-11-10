@@ -59,6 +59,62 @@ WAIT_JS = """() => {
 }"""
 
 
+# Writes the value on every bar (not the Cumulative Net line) of the Stock IN vs Stock OUT chart, so the
+# numbers can be read straight from the email picture. Only runs inside the screenshot browser.
+LABELS_JS = r"""() => {
+  if (!Chart.getChart('heroChart')) return 'chart not found';
+  document.getElementById('heroChart').parentElement.style.height = '440px';  // room for labels
+  const fmt = v => Number(v).toLocaleString('en-US');
+  Chart.register({
+    id: 'emailValueLabels',
+    beforeInit(c) {
+      if (c.canvas.id !== 'heroChart') return;
+      const o = c.config.options;
+      o.animation = false;
+      o.layout = { padding: { top: 20 } };
+      o.scales.y.grace = '15%';
+      o.scales.y1.grace = '15%';
+    },
+    afterDatasetsDraw(c) {
+      if (c.canvas.id !== 'heroChart') return;
+      const g = c.ctx;
+      g.save();
+      g.textAlign = 'center';
+      g.font = 'bold 10px Arial';
+      c.data.datasets.forEach((ds, di) => {
+        const meta = c.getDatasetMeta(di);
+        if (meta.hidden) return;
+        meta.data.forEach((el, i) => {
+          const v = ds.data[i];
+          if (v === null || v === undefined || v === 0) return;
+          // dark outline keeps every number readable where it crosses a bar or the line
+          const write = (txt, x, y, color, base) => {
+            g.textBaseline = base;
+            g.lineWidth = 3; g.lineJoin = 'round'; g.miterLimit = 2; g.strokeStyle = '#0D1117'; g.strokeText(txt, x, y);
+            g.fillStyle = color; g.fillText(txt, x, y);
+          };
+          if (ds.type === 'line') {                    // Cumulative Net: line only, no numbers
+            return;
+          } else if (ds.label === 'Stock IN') {        // on top of the green bar
+            write(fmt(v), el.x, el.y - 2, '#7EE787', 'bottom');
+          } else if (ds.label === 'Sales (OUT)') {     // on top of the blue bar
+            const t = c.data.datasets.find(d => d.label === 'Vendor Transfers');
+            const tv = t ? (t.data[i] || 0) : 0;
+            const top = tv ? c.getDatasetMeta(c.data.datasets.indexOf(t)).data[i].y : el.y;
+            write(fmt(v), el.x, top - 2, '#79C0FF', 'bottom');
+          } else if (Math.abs(el.base - el.y) >= 13) { // Vendor Transfers: inside if it fits
+            write(fmt(v), el.x, (el.y + el.base) / 2, '#F2CC60', 'middle');
+          }
+        });
+      });
+      g.restore();
+    }
+  });
+  renderHeroChart();   // redraw the chart with the labels switched on
+  return 'labels on';
+}"""
+
+
 def capture(url: str) -> dict:
     """Load the dashboard, wait for live data, save one PNG per section + a full page."""
     os.makedirs(OUT_DIR, exist_ok=True)
@@ -84,6 +140,9 @@ def capture(url: str) -> dict:
             if is_live(status):
                 break
             print(f"Attempt {attempt}: partial data {status}, retrying.")
+
+        # Print the numbers on the chart (email picture only; the live dashboard is unchanged).
+        page.evaluate(LABELS_JS)
 
         # Let fonts load and chart animations finish, and keep the sticky header out of section shots.
         page.evaluate("document.fonts.ready")
